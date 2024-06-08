@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "kapsule": "^1.14.5",
+    "three": "^0.164.1",
+    "three-render-objects": "^1.29.4"
+  },
+  "devDependencies": {
+    "vite": "^5.2.11"
+  }
+}
