@@ -1,33 +1,64 @@
 import * as THREE from "three";
 import Kapsule from "kapsule";
 
-// eventually return a kapsule (which will later be turned into a class (inherets from three.group) that calls init(this))
 export default Kapsule({
 	props: {
 		graphData: {
 			default: {
 				name: "root",
 				frameCount: 0,
-				children: []
-			}
+				children: [],
+			},
+		},
+		valueScale: {
+			default: 1,
+			// will update state.renderData properly
+		},
+		pointResolution: {
+			// something like this
+			default: (depth) => {
+				if(depth === 0) {
+					return 360;
+				}
+				let count = Math.floor(12 / depth);
+				return count < 2 ? 2 : count;
+			},
+		},
+
+		sectorColor: {
+			// something like this
+			default: (node, depth) => {
+				return {
+					r: depth * 10,
+					g: depth * 10,
+					b: depth * 10
+				};
+			},
 		}
 	},
+
+	// populate with internal variables as needed
 	stateInit(componentOptions) {
-		const geometry = new THREE.BoxGeometry(1, 1, 1);
-		const material = new THREE.MeshBasicMaterial({
-			color: 0x00ff00
-		});
-		const cube = new THREE.Mesh(geometry, material);
 		return {
-			mesh: cube
+			// root node will optionally be a cylinder or nothing (meshes stays empty)
+			renderData: {
+				name: "root",
+				frameCount: 0,
+				startAngle: 0,
+				endAngle: 2 * Math.PI,
+				depth: 0,
+				meshes: [],
+				children: [],
+			},
 		};
 	},
 
+	// get a refference to the threejs object
 	init(threeObj, state) {
-		state.threeGraph = threeObj;
-		state.threeGraph.add(state.mesh);
+		state.threeObj = threeObj;
 	},
 
+	// update graph mesh based on changes in properties
 	update(state, changedProps) {
 		return;
 	}
