@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import Kapsule from "kapsule";
+import accessorFn from 'accessor-fn';
 
 export default Kapsule({
 	props: {
@@ -9,10 +10,16 @@ export default Kapsule({
 				frameCount: 0,
 				children: [],
 			},
+
+			onChange() {
+				//deep copy graph data
+			}
 		},
 
 		visibleFrames: {
-			default: null,
+			default: d => {
+				return Array.from(Array(d.frameCount).keys());
+			},
 		},
 
 		scale: {
@@ -22,18 +29,21 @@ export default Kapsule({
 
 		resolution: {
 			// something like this
-			default: (depth) => {
-				if (depth === 0) {
+			default: d => {
+				if (d.depth === 1) {
 					return 360;
 				}
-				let count = Math.floor(12 / depth);
+				let count = Math.floor(12 / d.depth);
 				return count < 2 ? 2 : count;
 			},
 		},
 
 		color: {
 			// use accessorFn lib
-			default: d => "green"
+			default: d => {
+				let b = Math.floor(255 / d.depth);
+				return `rgb(${b}, ${b}, ${b})`
+			}
 		}
 	},
 
@@ -53,11 +63,10 @@ export default Kapsule({
 
 		//if(!changedProps.graphData) return;
 
-		if(typeof(this.visibleFrames()) !== "function") {
-			this.visibleFrames(() => {
-				return Array.from(Array(this.graphData().frameCount).keys());
-			}); 
-		}
+		var colorAccessor = accessorFn(this.color());
+		var resAccessor = accessorFn(this.resolution());
+		var frameAccessor = accessorFn(this.visibleFrames());
+		var scaleAccessor = accessorFn(this.scale());
 
 		state.threeObj.clear();
 
@@ -132,17 +141,13 @@ export default Kapsule({
 			recurse(root, null);
 		}
 
-		function build(root, frames_func, res_func) {
-			//change to function
-			//var pointCounts = [360, 12, 6, 2, 2, 2, 2, 2, 2, 2];
+		function build(root, this_) {
 
-			var frames = frames_func();
+			var frames = frameAccessor(this_.graphData());
 
 			function recurse(node) {
 				node.meshArr = [];
-				console.log(node.values)
 				var max_val = Math.max(...node.values); 
-
 				for (var i = 0; i < frames.length; i++) {
 					var f = frames[i];
 					// FIX
@@ -151,7 +156,7 @@ export default Kapsule({
 					var angleStart = node.angleStart;
 					var angleEnd = node.angleEnd;
 					//var radiusInner = (node.level - 1) * 100;
-					var radiusInner = node.depth * 100
+					var radiusInner = node.depth * 100;
 					var radiusOuter = radiusInner + (r == 0 ? 1 : r);
 					var cx, cy;
 
@@ -159,13 +164,13 @@ export default Kapsule({
 						var pie = new THREE.Shape();
 
 						//var pointCount = pointCounts[node.level - 1]; // Math.max( ((angleEnd - angleStart) / (Math.PI * 2)) * 360, 3 );
-						var pointCount = res_func(node.depth);
+						var pointCount = resAccessor(node);
 						var angleInc = (angleEnd - angleStart) / pointCount;
 
-						for (var i = 0; i <= pointCount; i++) {
-							cx = radiusOuter * Math.cos(angleStart + (i * angleInc));
-							cy = radiusOuter * Math.sin(angleStart + (i * angleInc));
-							if (i == 0) {
+						for (var j = 0; j <= pointCount; j++) {
+							cx = radiusOuter * Math.cos(angleStart + (j * angleInc));
+							cy = radiusOuter * Math.sin(angleStart + (j * angleInc));
+							if (j == 0) {
 								pie.moveTo(cx, cy);
 							} else {
 								pie.lineTo(cx, cy);
@@ -173,9 +178,9 @@ export default Kapsule({
 						}
 
 						if (radiusInner != 0) {
-							for (var i = 0; i <= pointCount; i++) {
-								cx = radiusInner * Math.cos(angleEnd - (i * angleInc));
-								cy = radiusInner * Math.sin(angleEnd - (i * angleInc));
+							for (var k = 0; k <= pointCount; k++) {
+								cx = radiusInner * Math.cos(angleEnd - (k * angleInc));
+								cy = radiusInner * Math.sin(angleEnd - (k * angleInc));
 								pie.lineTo(cx, cy);
 							}
 
@@ -187,12 +192,12 @@ export default Kapsule({
 
 
 						var pieGeometry = new THREE.ExtrudeGeometry(pie, {
-							amount: 10,
+							depth: 10,
 							steps: 1,
 							bevelEnabled: false
 						});
 						// FIX
-						var material = new THREE.MeshBasicMaterial( {color: (Math.random() * 0xfffff * 1000000)} );
+						var material = new THREE.MeshStandardMaterial( {color: (colorAccessor(node))} );
 						var mesh = new THREE.Mesh(pieGeometry, material);
 						mesh.frame = f;
 						mesh.position.z = i * 10;
@@ -206,7 +211,7 @@ export default Kapsule({
 						};
 						mesh.node = node;
 
-						if (f == 0) {
+						if (i == 0) {
 							state.threeObj.add(mesh);
 						} else {
 							mesh.parentMesh = node.meshArr[0];
@@ -233,12 +238,12 @@ export default Kapsule({
 
 		// should use accessorFn when accessing scale
 		function nodeRelativeValue(node, frame, max_val, high_map_val) {
-			return node.values[frame] / max_val * high_map_val;
+			return scaleAccessor(node)[frame] / max_val * high_map_val;
 		}
 
 		link(this.graphData());
 		model(this.graphData());
-		build(this.graphData(), this.visibleFrames(), this.resolution());
+		build(this.graphData(), this);
 
 	}
 });
