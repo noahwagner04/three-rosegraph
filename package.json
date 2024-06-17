@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "accessor-fn": "^1.5.0",
     "kapsule": "^1.14.5",
     "three": "^0.164.1",
     "three-render-objects": "^1.29.4"
