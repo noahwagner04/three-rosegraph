@@ -12,7 +12,7 @@ export default Kapsule({
 			},
 
 			onChange() {
-				//deep copy graph data
+				//deep copy graph data 
 			}
 		},
 
