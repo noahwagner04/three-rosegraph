@@ -11,8 +11,10 @@ export default Kapsule({
 				children: [],
 			},
 
-			onChange() {
-				//deep copy graph data 
+			// deep copy graph data (because it will be changed)
+			onChange(newVal, state) {
+				// use polyfill if we need to support older browsers
+				state.roseGraphData = structuredClone(this.graphData());
 			}
 		},
 
@@ -22,13 +24,15 @@ export default Kapsule({
 			},
 		},
 
+		excludeLayers: {
+			default: d => [],
+		},
+
 		scale: {
 			default: "values",
-			// use accessorFn lib
 		},
 
 		resolution: {
-			// something like this
 			default: d => {
 				if (d.depth === 1) {
 					return 360;
@@ -39,17 +43,23 @@ export default Kapsule({
 		},
 
 		color: {
-			// use accessorFn lib
 			default: d => {
-				let b = Math.floor(255 / d.depth);
-				return `rgb(${b}, ${b}, ${b})`
+				let b = Math.floor(255 / d.node.depth);
+				return `rgba(${b}, ${b}, ${b})`
 			}
-		}
+		},
+
+		thickness: {
+			default: d => 10
+		},
 	},
 
 	// populate with internal variables as needed
 	stateInit(componentOptions) {
-		return {};
+		return {
+			roseGraphData: {},
+			roseGraphNodes: [],
+		};
 	},
 
 	// get a refference to the threejs object
@@ -59,16 +69,54 @@ export default Kapsule({
 
 	// update graph mesh based on changes in properties
 	update(state, changedProps) {
-
-
-		//if(!changedProps.graphData) return;
+		state.firstUpdate = state.firstUpdate === undefined ? true : false;
 
 		var colorAccessor = accessorFn(this.color());
 		var resAccessor = accessorFn(this.resolution());
 		var frameAccessor = accessorFn(this.visibleFrames());
+		var layerAccessor = accessorFn(this.excludeLayers());
 		var scaleAccessor = accessorFn(this.scale());
+		var thicknessAccessor = accessorFn(this.thickness());
 
-		state.threeObj.clear();
+		if (state.firstUpdate || changedProps.graphData) {
+			state.threeObj.clear();
+			state.roseGraphNodes = [];
+
+			link(state.roseGraphData);
+			model(state.roseGraphData);
+			build(state.roseGraphData);
+
+			displayVisibleFrames();
+			return;
+		}
+
+		if (changedProps.visibleFrames || changedProps.excludeLayers) {
+			displayVisibleFrames();
+		}
+
+		if (changedProps.resolution || changedProps.thickness) {
+			state.threeObj.clear();
+			state.roseGraphNodes.forEach(node => {
+				node.meshArr = [];
+			});
+			build(state.roseGraphData);
+			displayVisibleFrames();
+		}
+
+		if (changedProps.color) {
+			state.roseGraphNodes.forEach(node => {
+				if (node.depth === 0) return;
+				node.meshArr.forEach(mesh => {
+					var material = new THREE.MeshStandardMaterial({
+						color: colorAccessor({
+							node: node,
+							frame: mesh.frame
+						})
+					});
+					mesh.material = material;
+				});
+			});
+		}
 
 		function link(root) {
 			var i = 0;
@@ -76,6 +124,8 @@ export default Kapsule({
 			function recurse(node, parent) {
 				node.parent = parent;
 				node.depth = parent ? parent.depth + 1 : 0;
+
+				state.roseGraphNodes.push(node);
 
 				if (node.children) node.children.forEach(function(n) {
 					recurse(n, node);
@@ -103,10 +153,6 @@ export default Kapsule({
 				var angleStart, angleEnd, angleDiv = 0,
 					angleMid;
 				var count, countN;
-
-				// node.level = 1;
-				// if (typeof(node.index) !== "undefined")
-				// 	node.level = node.index.split(".").length + 1;
 
 				angleStart = node.angleStart;
 				angleEnd = node.angleEnd;
@@ -141,21 +187,21 @@ export default Kapsule({
 			recurse(root, null);
 		}
 
-		function build(root, this_) {
-
-			var frames = frameAccessor(this_.graphData());
+		function build(root) {
+			var defaultFrameAccessor = accessorFn(d => {
+				return Array.from(Array(d.frameCount).keys());
+			});
+			var frames = defaultFrameAccessor(state.roseGraphData);
 
 			function recurse(node) {
 				node.meshArr = [];
-				var max_val = Math.max(...node.values); 
+				var max_val = Math.max(...node.values);
 				for (var i = 0; i < frames.length; i++) {
 					var f = frames[i];
-					// FIX
 					var r = nodeRelativeValue(node, f, max_val, 100);
 
 					var angleStart = node.angleStart;
 					var angleEnd = node.angleEnd;
-					//var radiusInner = (node.level - 1) * 100;
 					var radiusInner = node.depth * 100;
 					var radiusOuter = radiusInner + (r == 0 ? 1 : r);
 					var cx, cy;
@@ -163,7 +209,6 @@ export default Kapsule({
 					if (angleStart < angleEnd) {
 						var pie = new THREE.Shape();
 
-						//var pointCount = pointCounts[node.level - 1]; // Math.max( ((angleEnd - angleStart) / (Math.PI * 2)) * 360, 3 );
 						var pointCount = resAccessor(node);
 						var angleInc = (angleEnd - angleStart) / pointCount;
 
@@ -192,18 +237,22 @@ export default Kapsule({
 
 
 						var pieGeometry = new THREE.ExtrudeGeometry(pie, {
-							depth: 10,
+							depth: thicknessAccessor({
+								node: node,
+								frame: f,
+							}),
 							steps: 1,
 							bevelEnabled: false
 						});
-						// FIX
-						var material = new THREE.MeshStandardMaterial( {color: (colorAccessor(node))} );
+
+						var material = new THREE.MeshStandardMaterial({
+							color: colorAccessor({
+								node: node,
+								frame: f
+							})
+						});
 						var mesh = new THREE.Mesh(pieGeometry, material);
 						mesh.frame = f;
-						mesh.position.z = i * 10;
-						// mesh.scale.z = i <= activeIndex ? 1 : 0;
-						mesh.scaleZ = mesh.scale.z;
-						mesh.visible = mesh.scaleZ > 0.0;
 						mesh.labelPoint = {
 							x: ((radiusInner + radiusOuter) / 2) * Math.cos(angleStart + (pointCount / 2 * angleInc)),
 							y: ((radiusInner + radiusOuter) / 2) * Math.sin(angleStart + (pointCount / 2 * angleInc)),
@@ -211,12 +260,12 @@ export default Kapsule({
 						};
 						mesh.node = node;
 
-						if (i == 0) {
-							state.threeObj.add(mesh);
-						} else {
-							mesh.parentMesh = node.meshArr[0];
-							mesh.parentMesh.add(mesh);
-						}
+						// if (i == 0) {
+						// 	state.threeObj.add(mesh);
+						// } else {
+						// 	mesh.parentMesh = node.meshArr[0];
+						// 	mesh.parentMesh.add(mesh);
+						// }
 
 						node.meshArr.push(mesh);
 					}
@@ -230,7 +279,7 @@ export default Kapsule({
 
 			}
 
-			//recurse(root);
+			if (!root.children) return;
 			root.children.forEach(function(n) {
 				recurse(n);
 			});
@@ -241,9 +290,27 @@ export default Kapsule({
 			return scaleAccessor(node)[frame] / max_val * high_map_val;
 		}
 
-		link(this.graphData());
-		model(this.graphData());
-		build(this.graphData(), this);
 
+		function displayVisibleFrames() {
+			state.threeObj.clear();
+			let excludeLayers = layerAccessor(state.roseGraphData);
+
+			state.roseGraphNodes.forEach(node => {
+				let zPos = 0;
+				if (node.depth === 0) return;
+
+				if(excludeLayers.indexOf(node.depth) !== -1) return;
+
+				frameAccessor(state.roseGraphData).forEach(frame => {
+					let mesh = node.meshArr[frame];
+					mesh.position.z = zPos;
+					zPos += thicknessAccessor({
+						node: node,
+						frame: frame,
+					});
+					state.threeObj.add(mesh);
+				});
+			});
+		}
 	}
 });
