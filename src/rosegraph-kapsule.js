@@ -32,6 +32,10 @@ export default Kapsule({
 			default: "values",
 		},
 
+		category: {
+			default: "isCategory"
+		},
+
 		resolution: {
 			default: d => {
 				if (d.depth === 1) {
@@ -51,6 +55,10 @@ export default Kapsule({
 
 		thickness: {
 			default: d => 10
+		},
+
+		radius: {
+			default: d => 100
 		},
 	},
 
@@ -76,7 +84,9 @@ export default Kapsule({
 		var frameAccessor = accessorFn(this.visibleFrames());
 		var layerAccessor = accessorFn(this.excludeLayers());
 		var scaleAccessor = accessorFn(this.scale());
+		var categoryAccessor = accessorFn(this.category());
 		var thicknessAccessor = accessorFn(this.thickness());
+		var radiusAccessor = accessorFn(this.radius());
 
 		if (state.firstUpdate || changedProps.graphData) {
 			state.threeObj.clear();
@@ -85,8 +95,6 @@ export default Kapsule({
 			link(state.roseGraphData);
 			model(state.roseGraphData);
 			build(state.roseGraphData);
-
-			displayVisibleFrames();
 			return;
 		}
 
@@ -94,17 +102,14 @@ export default Kapsule({
 			displayVisibleFrames();
 		}
 
-		if (changedProps.resolution) {
+		if (changedProps.resolution || 
+			changedProps.radius || 
+			changedProps.thickness) {
 			state.threeObj.clear();
 			state.roseGraphNodes.forEach(node => {
 				node.meshArr = [];
 			});
 			build(state.roseGraphData);
-			displayVisibleFrames();
-		}
-
-		if(changedProps.thickness) {
-			updateThickness();
 		}
 
 		if (changedProps.color) {
@@ -199,11 +204,11 @@ export default Kapsule({
 				var max_val = Math.max(...node.values);
 				for (var i = 0; i < frames.length; i++) {
 					var f = frames[i];
-					var r = nodeRelativeValue(node, f, max_val, 100);
+					var r = categoryAccessor(node) ? 100 : nodeRelativeValue(node, f, max_val, 100);
 
 					var angleStart = node.angleStart;
 					var angleEnd = node.angleEnd;
-					var radiusInner = node.depth * 100;
+					var radiusInner = radiusAccessor(node) + (node.depth - 1) * 100;
 					var radiusOuter = radiusInner + (r == 0 ? 1 : r);
 					var cx, cy;
 
@@ -238,7 +243,10 @@ export default Kapsule({
 
 
 						var pieGeometry = new THREE.ExtrudeGeometry(pie, {
-							depth: 1,
+							depth: thicknessAccessor({
+								node: node,
+								frame: f,
+							}),
 							steps: 1,
 							bevelEnabled: false
 						});
@@ -282,7 +290,7 @@ export default Kapsule({
 				recurse(n);
 			});
 
-			updateThickness();
+			displayVisibleFrames();
 		}
 
 		// should use accessorFn when accessing scale
@@ -309,22 +317,6 @@ export default Kapsule({
 						frame: frame,
 					});
 					state.threeObj.add(mesh);
-				});
-			});
-		}
-
-		function updateThickness() {
-			state.roseGraphNodes.forEach(node => {
-				if (node.depth === 0) return;
-				let zPos = 0;
-				node.meshArr.forEach(mesh => {
-					let thickness = thicknessAccessor({
-						node: node,
-						frame: mesh.frame,
-					});
-					mesh.scale.setComponent(2, thickness);
-					mesh.position.z = zPos;
-					zPos += thickness;
 				});
 			});
 		}
