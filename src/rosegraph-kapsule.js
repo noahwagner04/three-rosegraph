@@ -94,7 +94,7 @@ export default Kapsule({
 			displayVisibleFrames();
 		}
 
-		if (changedProps.resolution || changedProps.thickness) {
+		if (changedProps.resolution) {
 			state.threeObj.clear();
 			state.roseGraphNodes.forEach(node => {
 				node.meshArr = [];
@@ -103,17 +103,18 @@ export default Kapsule({
 			displayVisibleFrames();
 		}
 
+		if(changedProps.thickness) {
+			updateThickness();
+		}
+
 		if (changedProps.color) {
 			state.roseGraphNodes.forEach(node => {
 				if (node.depth === 0) return;
 				node.meshArr.forEach(mesh => {
-					var material = new THREE.MeshStandardMaterial({
-						color: colorAccessor({
-							node: node,
-							frame: mesh.frame
-						})
-					});
-					mesh.material = material;
+					mesh.material.color = new THREE.Color().set(colorAccessor({
+						node: node,
+						frame: mesh.frame
+					}));
 				});
 			});
 		}
@@ -237,10 +238,7 @@ export default Kapsule({
 
 
 						var pieGeometry = new THREE.ExtrudeGeometry(pie, {
-							depth: thicknessAccessor({
-								node: node,
-								frame: f,
-							}),
+							depth: 1,
 							steps: 1,
 							bevelEnabled: false
 						});
@@ -283,6 +281,8 @@ export default Kapsule({
 			root.children.forEach(function(n) {
 				recurse(n);
 			});
+
+			updateThickness();
 		}
 
 		// should use accessorFn when accessing scale
@@ -299,7 +299,7 @@ export default Kapsule({
 				let zPos = 0;
 				if (node.depth === 0) return;
 
-				if(excludeLayers.indexOf(node.depth) !== -1) return;
+				if (excludeLayers.indexOf(node.depth) !== -1) return;
 
 				frameAccessor(state.roseGraphData).forEach(frame => {
 					let mesh = node.meshArr[frame];
@@ -309,6 +309,22 @@ export default Kapsule({
 						frame: frame,
 					});
 					state.threeObj.add(mesh);
+				});
+			});
+		}
+
+		function updateThickness() {
+			state.roseGraphNodes.forEach(node => {
+				if (node.depth === 0) return;
+				let zPos = 0;
+				node.meshArr.forEach(mesh => {
+					let thickness = thicknessAccessor({
+						node: node,
+						frame: mesh.frame,
+					});
+					mesh.scale.setComponent(2, thickness);
+					mesh.position.z = zPos;
+					zPos += thickness;
 				});
 			});
 		}
