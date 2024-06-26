@@ -62,6 +62,37 @@ export default Kapsule({
 		},
 	},
 
+	methods: {
+		getNodeObjs: function(state, filterFunc) {
+			let frames = accessorFn(this.visibleFrames())(state.roseGraphData);
+			let node = state.roseGraphNodes.find(filterFunc);
+			if(!node) return undefined;
+
+			let result = [];
+			node.meshArr.forEach(mesh => {
+				if(frames.indexOf(mesh.frame) !== -1) result.push(mesh);
+			});
+			return result;
+		},
+
+		getNodeBbox: function(state, filterFunc) {
+			let meshes = this.getNodeObjs(filterFunc);
+
+			let Bboxes = [];
+			meshes.forEach(mesh => {
+				Bboxes.push(new THREE.Box3().setFromObject(mesh));
+			});
+
+			let finalBbox = new THREE.Box3();
+
+			Bboxes.forEach(Bbox => {
+				finalBbox.union(Bbox);
+			});
+
+			return finalBbox;
+		},
+	},
+
 	// populate with internal variables as needed
 	stateInit(componentOptions) {
 		return {
